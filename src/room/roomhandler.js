@@ -1,4 +1,5 @@
 const peerConnections = {};
+const socketRoomMap = {};
 
 const roomHandler = (io) => (socket) => {
   console.log('A user connected:', socket.id);
@@ -6,6 +7,7 @@ const roomHandler = (io) => (socket) => {
   // Handle join-room event
   socket.on('join-room', (roomId) => {
     socket.join(roomId);
+    socketRoomMap[socket.id] = roomId;
     console.log(`User ${socket.id} joined room ${roomId}`);
   });
 
@@ -30,6 +32,11 @@ const roomHandler = (io) => (socket) => {
   // Handle disconnect event
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
+    const roomId = socketRoomMap[socket.id];
+    if (roomId) {
+      io.to(roomId).emit('disconnection', socket.id);
+      delete socketRoomMap[socket.id]; 
+    }
   });
 };
 
