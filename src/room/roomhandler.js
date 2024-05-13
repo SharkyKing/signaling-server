@@ -1,15 +1,15 @@
 
-const emailToSocketIdMap = new Map();
-const socketidToEmailMap = new Map();
+const phoneToSocketIdMap = new Map();
+const socketidToPhoneMap = new Map();
 
 const roomHandler = (io) => (socket) => {
   console.log("Socket [", socket.id, "] connected");
 
   socket.on("room:join", (data) => {
-    const { email, room } = data;
-    emailToSocketIdMap.set(email, socket.id);
-    socketidToEmailMap.set(socket.id, email);
-    io.to(room).emit("user:joined", { email, id: socket.id });
+    const { phone, room } = data;
+    phoneToSocketIdMap.set(phone, socket.id);
+    socketidToPhoneMap.set(socket.id, phone);
+    io.to(room).emit("user:joined", { phone, id: socket.id });
     socket.join(room);
     io.to(socket.id).emit("room:join", data);
   });
