@@ -1,36 +1,45 @@
+const emailToSocketIDMap = new Map();
+const socketIDToEmailMap = new Map();
 
-const phoneToSocketIdMap = new Map();
-const socketidToPhoneMap = new Map();
+
+const handleConnect = (io, socket, { email, roomID }, isGuest) => {
+  console.log('===================================================================================================')
+  console.log('handleConnect START')
+  console.log('===================================================================================================')
+
+  const data = { email, roomID }
+
+  console.log('USER -', email, '- CONNECTING TO ROOM -', roomID, '-');
+
+  console.log('MAPPING USER -',email,'- TO SOCKETID -', socket.id, '-');
+  emailToSocketIDMap.set(email, socket.id);
+
+  console.log('MAPPING SOCKETID -',socket.id,'- TO USER -', email, '-');
+  socketIDToEmailMap.set(socket.id, email)
+
+  console.log('SOCKET -',socket.id,'- CONNECTING TO ROOM -',roomID);
+  socket.join(roomID);
+
+  console.log('BROADCASTING USER:JOINED TO ROOM -',roomID);
+  io.to(roomID).emit('participant:joined', {email, remoteSocketID:socket.id});
+
+  console.log('SENDING DATA OUT BACK TO SOCKET -',socket.id,'-',data);
+  if(isGuest){
+    io.to(socket.id).emit("guest:room:joinsuccess", data)
+  }
+  else{
+    io.to(socket.id).emit("user:room:joinsuccess", data)
+  }
+  console.log('===================================================================================================')
+  console.log('handleConnect END')
+  console.log('===================================================================================================')
+};
 
 const roomHandler = (io) => (socket) => {
   console.log("Socket [", socket.id, "] connected");
 
-  socket.on("room:join", (data) => {
-    const { phone, room } = data;
-    phoneToSocketIdMap.set(phone, socket.id);
-    socketidToPhoneMap.set(socket.id, phone);
-    io.to(room).emit("user:joined", { phone, id: socket.id });
-    socket.join(room);
-    io.to(socket.id).emit("room:join", data);
-  });
-
-  socket.on("user:call", ({ to, offer }) => {
-    io.to(to).emit("incomming:call", { from: socket.id, offer });
-  });
-
-  socket.on("call:accepted", ({ to, ans }) => {
-    io.to(to).emit("call:accepted", { from: socket.id, ans });
-  });
-
-  socket.on("peer:nego:needed", ({ to, offer }) => {
-    console.log("peer:nego:needed", offer);
-    io.to(to).emit("peer:nego:needed", { from: socket.id, offer });
-  });
-
-  socket.on("peer:nego:done", ({ to, ans }) => {
-    console.log("peer:nego:done", ans);
-    io.to(to).emit("peer:nego:final", { from: socket.id, ans });
-  });
+  socket.on("guest:room:join", (data) => handleConnect(io, socket, data,true))
+  socket.on("user:room:join", (data) => handleConnect(io, socket, data,false))
 };
 
 module.exports = roomHandler;
