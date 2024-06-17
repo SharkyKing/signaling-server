@@ -1,45 +1,120 @@
-const emailToSocketIDMap = new Map();
-const socketIDToEmailMap = new Map();
-
+const SocketHelper = require('../SocketHelper/SocketHelper');
 
 const handleConnect = (io, socket, { email, roomID }, isGuest) => {
-  console.log('===================================================================================================')
-  console.log('handleConnect START')
-  console.log('===================================================================================================')
+  try {
+    SocketHelper.LogEventHeader(handleConnect.name, true);
 
-  const data = { email, roomID }
+    const data = { email, roomID };
 
-  console.log('USER -', email, '- CONNECTING TO ROOM -', roomID, '-');
+    SocketHelper.MapSocketToEmail(socket, email);
+    SocketHelper.SocketJoinRoom(socket, roomID);
+    SocketHelper.BroadcastToRoom(socket, roomID, "participant:joined", { email, remoteSocketID: socket.id });
 
-  console.log('MAPPING USER -',email,'- TO SOCKETID -', socket.id, '-');
-  emailToSocketIDMap.set(email, socket.id);
+    if (isGuest) {
+      SocketHelper.SendDataBackToSocket(io, socket, "guest:room:joinsuccess", data);
+    } else {
+      SocketHelper.SendDataBackToSocket(io, socket, "user:room:joinsuccess", data);
+    }
 
-  console.log('MAPPING SOCKETID -',socket.id,'- TO USER -', email, '-');
-  socketIDToEmailMap.set(socket.id, email)
-
-  console.log('SOCKET -',socket.id,'- CONNECTING TO ROOM -',roomID);
-  socket.join(roomID);
-
-  console.log('BROADCASTING USER:JOINED TO ROOM -',roomID);
-  io.to(roomID).emit('participant:joined', {email, remoteSocketID:socket.id});
-
-  console.log('SENDING DATA OUT BACK TO SOCKET -',socket.id,'-',data);
-  if(isGuest){
-    io.to(socket.id).emit("guest:room:joinsuccess", data)
+    SocketHelper.LogEventHeader(handleConnect.name, false);
+  } catch (error) {
+    console.error('Error in handleConnect:', error);
   }
-  else{
-    io.to(socket.id).emit("user:room:joinsuccess", data)
-  }
-  console.log('===================================================================================================')
-  console.log('handleConnect END')
-  console.log('===================================================================================================')
 };
+
+const handleUserReady = (io, socket, {to, offer}) => {
+  SocketHelper.LogEventHeader(handleUserReady.name, true);
+
+  SocketHelper.SendDataToAnotherSocket(io, to, 'user:prepared', {from: socket.id, offer})
+
+  SocketHelper.LogEventHeader(handleUserReady.name, false);
+}
+
+const handleGuestCallAccepted = (io, socket, {to, answer}) => {
+  SocketHelper.LogEventHeader(handleGuestCallAccepted.name, true);
+
+  SocketHelper.SendDataToAnotherSocket(io, to, 'guestcall:prepared', {from: socket.id, answer})
+
+  SocketHelper.LogEventHeader(handleGuestCallAccepted.name, false);
+}
+
+const handlePeerNegoNeeded = (io, socket, {to, offer}) => {
+  SocketHelper.LogEventHeader(handlePeerNegoNeeded.name, true);
+
+  SocketHelper.SendDataToAnotherSocket(io, to, 'peer:nego:needed', {from: to, offer})
+
+  SocketHelper.LogEventHeader(handlePeerNegoNeeded.name, false);
+}
+
+const handlePeerNegoDone = (io, socket, {to, ans}) => {
+  SocketHelper.LogEventHeader(handlePeerNegoDone.name, true);
+
+  SocketHelper.SendDataToAnotherSocket(io, to, 'peer:nego:final', {from: socket.id, ans})
+
+  SocketHelper.LogEventHeader(handlePeerNegoDone.name, false);
+}
 
 const roomHandler = (io) => (socket) => {
   console.log("Socket [", socket.id, "] connected");
 
-  socket.on("guest:room:join", (data) => handleConnect(io, socket, data,true))
-  socket.on("user:room:join", (data) => handleConnect(io, socket, data,false))
+  const listenEvents = {
+    GUESTROOMJOIN: "guest:room:join",
+    USERROOMJOIN: "user:room:join",
+    USERREADY: "user:ready",
+    GUESTCALLACCPETED: "guestcall:accepted",
+    PEERNEGONEEDED: "peer:nego:needed",
+    PEERNEGODONE: "peer:nego:done"
+  };
+
+  socket.on(listenEvents.GUESTROOMJOIN, (data) => {
+    try {
+      handleConnect(io, socket, data, true);
+    } catch (error) {
+      SocketHelper.ErrorOutput(listenEvents.GUESTROOMJOIN, error)
+    }
+  });
+
+  socket.on(listenEvents.USERROOMJOIN, (data) => {
+    try {
+      handleConnect(io, socket, data, false);
+    } catch (error) {
+      SocketHelper.ErrorOutput(listenEvents.USERROOMJOIN, error)
+    }
+  });
+
+  socket.on(listenEvents.USERREADY, (data) =>{
+    try{
+      handleUserReady(io, socket, data)
+    }catch(error){
+      SocketHelper.ErrorOutput(listenEvents.USERREADY, error)
+    }
+  })
+
+  socket.on(listenEvents.GUESTCALLACCPETED, (data) => {
+    try{
+      handleGuestCallAccepted(io, socket, data)
+    }catch(error){
+      SocketHelper.ErrorOutput(listenEvents.GUESTCALLACCPETED, error)
+    }
+  })
+
+  socket.on(listenEvents.PEERNEGONEEDED, (data) => {
+    try{
+      console.log(data);
+      handlePeerNegoNeeded(io, socket, data)
+    }catch(error){
+      SocketHelper.ErrorOutput(listenEvents.PEERNEGONEEDED, error)
+    }
+  })
+
+  socket.on(listenEvents.PEERNEGODONE, (data) => {
+    try{
+      console.log(data);
+      handlePeerNegoDone(io, socket, data)
+    }catch(error){
+      SocketHelper.ErrorOutput(listenEvents.PEERNEGODONE, error)
+    }
+  })
 };
 
 module.exports = roomHandler;
